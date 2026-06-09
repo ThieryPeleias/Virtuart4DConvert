@@ -8,13 +8,16 @@ set "STAGE=%ZIP_DIR%\stage"
 echo === Virtuart4DConvert build + pack ===
 echo.
 
-:: Check for MPXJ.Net updates
+:: Check for MPXJ.Net updates and auto-upgrade
 echo [0/4] Checking for MPXJ.Net updates...
-dotnet list "%SCRIPT_DIR%Virtuart4DConvert.csproj" package --outdated 2>nul | findstr /i "mpxj"
-if errorlevel 1 (
-    echo   MPXJ.Net: up to date or unable to check.
+for /f "tokens=4" %%V in ('dotnet list "%SCRIPT_DIR%Virtuart4DConvert.csproj" package --outdated 2^>nul ^| findstr /i "mpxj"') do set "LATEST_VER=%%V"
+if defined LATEST_VER (
+    echo   MPXJ.Net update found: %LATEST_VER% — upgrading...
+    dotnet add "%SCRIPT_DIR%Virtuart4DConvert.csproj" package MPXJ.Net --version %LATEST_VER%
+    if errorlevel 1 ( echo ERROR: dotnet add package failed. & pause & exit /b 1 )
+    echo   MPXJ.Net upgraded to %LATEST_VER%.
 ) else (
-    echo   WARNING: MPXJ.Net update available. Update csproj before release if needed.
+    echo   MPXJ.Net: up to date.
 )
 echo.
 
