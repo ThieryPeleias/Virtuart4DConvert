@@ -27,7 +27,7 @@ echo.
 
 :: Check for MPXJ.Net updates and auto-upgrade
 echo [0/4] Checking for MPXJ.Net updates...
-for /f "tokens=4" %%V in ('dotnet list "%SCRIPT_DIR%Virtuart4DConvert.csproj" package --outdated 2^>nul ^| findstr /i "mpxj"') do set "LATEST_VER=%%V"
+for /f "tokens=5" %%V in ('dotnet list "%SCRIPT_DIR%Virtuart4DConvert.csproj" package --outdated 2^>nul ^| findstr /i "mpxj"') do set "LATEST_VER=%%V"
 if defined LATEST_VER (
     echo   MPXJ.Net update found: %LATEST_VER% — upgrading...
     dotnet add "%SCRIPT_DIR%Virtuart4DConvert.csproj" package MPXJ.Net --version %LATEST_VER%

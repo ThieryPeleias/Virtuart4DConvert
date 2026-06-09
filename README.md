@@ -81,10 +81,3 @@ After extraction that folder must contain `Virtuart4DConvert.exe`.
 | SQLite JDBC | Apache 2.0 |
 | RTF Parser Kit | Apache 2.0 |
 
----
-
-## Custom exe
-
-You can replace `Virtuart4DConvert.exe` in the plugin's
-`Binaries/ThirdPartyTools/Virtuart4DConvert/` folder with your own build,
-provided it accepts `<input-file> <output.json>` as arguments and writes a valid `v4d.json` schema v1.
