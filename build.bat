@@ -8,6 +8,22 @@ set "STAGE=%ZIP_DIR%\stage"
 echo === Virtuart4DConvert build + pack ===
 echo.
 
+:: Check .NET SDK installed
+where dotnet >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: dotnet SDK not found.
+    echo   Install .NET 8 SDK from: https://dotnet.microsoft.com/download/dotnet/8.0
+    pause & exit /b 1
+)
+for /f "tokens=1" %%V in ('dotnet --version 2^>nul') do set "DOTNET_VER=%%V"
+echo   .NET SDK: %DOTNET_VER%
+if "%DOTNET_VER:~0,1%" LSS "8" (
+    echo ERROR: .NET 8 SDK required. Found: %DOTNET_VER%
+    echo   Install from: https://dotnet.microsoft.com/download/dotnet/8.0
+    pause & exit /b 1
+)
+echo.
+
 :: Check for MPXJ.Net updates and auto-upgrade
 echo [0/4] Checking for MPXJ.Net updates...
 for /f "tokens=4" %%V in ('dotnet list "%SCRIPT_DIR%Virtuart4DConvert.csproj" package --outdated 2^>nul ^| findstr /i "mpxj"') do set "LATEST_VER=%%V"
