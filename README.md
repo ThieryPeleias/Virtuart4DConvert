@@ -6,29 +6,48 @@ Uses [MPXJ.Net](https://mpxj.org) internally.
 
 ---
 
-## Prerequisites
+## Build from source
 
-- [.NET 8+ SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+### 1. Install .NET SDK
 
----
+Check if already installed:
 
-## Build
+```
+dotnet --version
+```
 
-```bat
+If missing or below 8.x, download from: https://dotnet.microsoft.com/download/dotnet/8.0
+
+### 2. Clone the repo
+
+```
+git clone https://github.com/ThieryPeleias/Virtuart4DConvert.git
+cd Virtuart4DConvert
+```
+
+### 3. Run the build script
+
+```
 build.bat
 ```
 
-That's it. The script:
+That's it. The script handles everything:
 
-1. Checks .NET SDK version
-2. Checks for MPXJ.Net updates on NuGet — upgrades automatically if found
-3. Runs `dotnet publish` (downloads all dependencies from NuGet on first run)
-4. Removes `.pdb` debug symbols
-5. Copies `licenses/` into the package
-6. Creates `zip\Virtuart4DConvert.zip`
-7. Deletes staging files — only the ZIP remains
+- Checks .NET SDK version
+- Checks for MPXJ.Net updates on NuGet and upgrades automatically if found
+- Downloads all dependencies from NuGet (first run takes a few minutes)
+- Compiles and publishes a self-contained Windows exe
+- Removes `.pdb` debug symbols
+- Bundles the `licenses/` folder
+- Produces `zip\Virtuart4DConvert.zip`
+- Deletes staging files — only the ZIP remains in `zip\`
 
-Output: `zip\Virtuart4DConvert.zip`
+### 4. Output
+
+```
+zip\
+  Virtuart4DConvert.zip    ← upload this to GitHub release
+```
 
 ---
 
@@ -39,13 +58,13 @@ Output: `zip\Virtuart4DConvert.zip`
 3. Upload `zip\Virtuart4DConvert.zip` as release asset — name must be exactly `Virtuart4DConvert.zip`
 
 The Virtuart4D plugin downloads from `.../releases/latest/download/Virtuart4DConvert.zip`.
-Fixed name = stable URL, always points to latest release.
+Fixed filename = stable URL, always points to the latest release.
 
 ---
 
 ## Licenses
 
-`licenses/` contains the license texts for all bundled libraries:
+`licenses/` contains license texts for all bundled libraries, required for LGPL and Apache 2.0 compliance:
 
 | Library | License |
 |---|---|
@@ -55,12 +74,10 @@ Fixed name = stable URL, always points to latest release.
 | SQLite JDBC | Apache 2.0 |
 | RTF Parser Kit | Apache 2.0 |
 
-Required by LGPL and Apache 2.0 terms when distributing the compiled binary.
-
 ---
 
-## Custom build
+## Custom exe
 
 You can replace `Virtuart4DConvert.exe` in the plugin's
 `Binaries/ThirdPartyTools/Virtuart4DConvert/` folder with your own build,
-provided it accepts `<input-file> <output.json>` and writes a valid `v4d.json` schema v1.
+provided it accepts `<input-file> <output.json>` as arguments and writes a valid `v4d.json` schema v1.
