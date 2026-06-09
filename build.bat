@@ -16,9 +16,10 @@ if errorlevel 1 (
     pause & exit /b 1
 )
 for /f "tokens=1" %%V in ('dotnet --version 2^>nul') do set "DOTNET_VER=%%V"
+for /f "delims=." %%M in ("%DOTNET_VER%") do set "DOTNET_MAJOR=%%M"
 echo   .NET SDK: %DOTNET_VER%
-if "%DOTNET_VER:~0,1%" LSS "8" (
-    echo ERROR: .NET 8 SDK required. Found: %DOTNET_VER%
+if %DOTNET_MAJOR% LSS 8 (
+    echo ERROR: .NET 8+ SDK required. Found: %DOTNET_VER%
     echo   Install from: https://dotnet.microsoft.com/download/dotnet/8.0
     pause & exit /b 1
 )
