@@ -31,7 +31,7 @@ cd Virtuart4DConvert
 build.bat
 ```
 
-That's it. The script handles everything:
+The script handles everything:
 
 - Checks .NET SDK version
 - Checks for MPXJ.Net updates on NuGet and upgrades automatically if found
@@ -40,25 +40,32 @@ That's it. The script handles everything:
 - Removes `.pdb` debug symbols
 - Bundles the `licenses/` folder
 - Produces `zip\Virtuart4DConvert.zip`
-- Deletes staging files — only the ZIP remains in `zip\`
+- Deletes staging files — only the ZIP remains
 
-### 4. Output
-
-```
-zip\
-  Virtuart4DConvert.zip    ← upload this to GitHub release
-```
+Output: `zip\Virtuart4DConvert.zip`
 
 ---
 
-## Release
+## Install into the plugin
 
-1. Run `build.bat`
-2. Create a GitHub release with tag `v0.x.0` (with `v` prefix)
-3. Upload `zip\Virtuart4DConvert.zip` as release asset — name must be exactly `Virtuart4DConvert.zip`
+Two options:
 
-The Virtuart4D plugin downloads from `.../releases/latest/download/Virtuart4DConvert.zip`.
-Fixed filename = stable URL, always points to the latest release.
+**Option A — via the plugin dialog (recommended)**
+
+In the Unreal Editor, open the Virtuart4D panel and click **New (Pro)**.
+When the *Pro Import Mode* dialog appears, click **Install from ZIP**
+and select `zip\Virtuart4DConvert.zip`.
+The plugin extracts it automatically and enables Pro mode.
+
+**Option B — manual extraction**
+
+Extract `zip\Virtuart4DConvert.zip` directly into:
+
+```
+<UE project>\Plugins\Virtuart4DPlugin\Binaries\ThirdPartyTools\Virtuart4DConvert\
+```
+
+After extraction that folder must contain `Virtuart4DConvert.exe`.
 
 ---
 
