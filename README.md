@@ -7,13 +7,13 @@
 [![Website](https://img.shields.io/badge/🌐_Website-virtuart4d.com-007586?style=for-the-badge)](https://virtuart4d.com/)
 [![Unreal Engine](https://img.shields.io/badge/Unreal_Engine-5.7-0E1128?style=for-the-badge&logo=unrealengine&logoColor=white)](https://www.unrealengine.com/)
 [![.NET](https://img.shields.io/badge/.NET_8.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](https://github.com/ThieryPeleias/Virtuart4D)
+[![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](https://virtuart4d.com/)
 
 ![platform](https://img.shields.io/badge/platform-Windows-blue?style=flat-square)
 ![build](https://img.shields.io/badge/build-self--contained-brightgreen?style=flat-square)
 ![status](https://img.shields.io/badge/status-production-success?style=flat-square)
 
-*Consumed by the [Virtuart4D](https://github.com/ThieryPeleias/Virtuart4D) Unreal Engine plugin for **BIM 4D planning & immersive visualization**. Uses [MPXJ.Net](https://mpxj.org) internally.*
+*Consumed by the [Virtuart4D](https://virtuart4d.com/) Unreal Engine plugin for **BIM 4D planning & immersive visualization**. Uses [MPXJ.Net](https://mpxj.org) internally.*
 
 </div>
 
@@ -126,7 +126,7 @@ Extract `zip\Virtuart4DConvert.zip` directly into:
 
 <div align="center">
 
-**[🌐 Website](https://virtuart4d.com/)** · **[🔌 Virtuart4D Plugin](https://github.com/ThieryPeleias/Virtuart4D)** · **[📦 MPXJ](https://mpxj.org)**
+**[🌐 Website](https://virtuart4d.com/)** · **[📦 MPXJ](https://mpxj.org)**
 
 *Made with ❤️ by [Virtuart](https://virtuart4d.com/)*
 
