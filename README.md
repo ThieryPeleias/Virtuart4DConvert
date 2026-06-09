@@ -1,94 +1,66 @@
-﻿# Virtuart4DConvert — Build & Distribution Guide
+# Virtuart4DConvert
 
-CLI tool wrapping [MPXJ.Net](https://mpxj.org) to convert MPP/XER/P6/XPP schedules
-to the `v4d.json` format consumed by the Virtuart4D UE plugin.
+CLI tool that converts MPP/XER/P6/XPP construction schedules to the `v4d.json` format
+consumed by the [Virtuart4D](https://github.com/ThieryPeleias/Virtuart4D) UE plugin.
+Uses [MPXJ.Net](https://mpxj.org) internally.
 
 ---
 
 ## Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 8+ SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 
 ---
 
-## Building
+## Build
 
-```powershell
-git clone https://github.com/ThieryPeleias/Virtuart4DConvert.git
-cd Virtuart4DConvert
-dotnet restore
-dotnet publish -c Release -r win-x64 --self-contained
+```bat
+build.bat
 ```
 
-Output: `publish/` folder.
+That's it. The script:
+
+1. Checks .NET SDK version
+2. Checks for MPXJ.Net updates on NuGet — upgrades automatically if found
+3. Runs `dotnet publish` (downloads all dependencies from NuGet on first run)
+4. Removes `.pdb` debug symbols
+5. Copies `licenses/` into the package
+6. Creates `zip\Virtuart4DConvert.zip`
+7. Deletes staging files — only the ZIP remains
+
+Output: `zip\Virtuart4DConvert.zip`
 
 ---
 
-## Distribution ZIP
+## Release
 
-### What to include
+1. Run `build.bat`
+2. Create a GitHub release with tag `v0.x.0` (with `v` prefix)
+3. Upload `zip\Virtuart4DConvert.zip` as release asset — name must be exactly `Virtuart4DConvert.zip`
 
-| Path in ZIP | Required |
+The Virtuart4D plugin downloads from `.../releases/latest/download/Virtuart4DConvert.zip`.
+Fixed name = stable URL, always points to latest release.
+
+---
+
+## Licenses
+
+`licenses/` contains the license texts for all bundled libraries:
+
+| Library | License |
 |---|---|
-| `Virtuart4DConvert.exe` | Yes |
-| `ikvm/win-x64/` | Yes (native IKVM runtime, cannot be single-filed) |
-| `licenses/` | Yes (license texts — see below) |
-| `*.pdb` | **No** — omit debug symbols from release |
+| [MPXJ](https://mpxj.org) by Jon Iles | GNU LGPL 2.1 or later |
+| Apache POI | Apache 2.0 |
+| jsoup | MIT |
+| SQLite JDBC | Apache 2.0 |
+| RTF Parser Kit | Apache 2.0 |
 
-### Licenses folder (required for Apache 2.0 + LGPL compliance)
-
-Already present in the repo root at `licenses/`:
-`mpxj-lgpl2.1.txt`, `apache-poi-apache2.txt`, `jsoup-mit.txt`,
-`sqlite-jdbc-apache2.txt`, `rtfparserkit-apache2.txt`.
-
-The build script copies this folder into `publish\licenses\` before zipping.
-
-### Build script (PowerShell)
-
-The ZIP is always named `Virtuart4DConvert.zip` (fixed URL — GitHub `/releases/latest/download/`
-always resolves to the most recent published release). The exe inside is always
-`Virtuart4DConvert.exe`; the version is embedded in its Windows file properties.
-
-```powershell
-# Remove .pdb files (not needed at runtime)
-Get-Item publish\*.pdb -ErrorAction SilentlyContinue | Remove-Item -Force
-
-# Copy licenses folder (tracked in repo root) into publish/
-Copy-Item -Recurse -Force licenses publish\licenses
-
-# Pack — fixed name, no version in filename
-Compress-Archive -Path publish\* -DestinationPath Virtuart4DConvert.zip -Force
-Write-Host "Created: Virtuart4DConvert.zip"
-```
-
-Upload `Virtuart4DConvert.zip` as a release asset named exactly `Virtuart4DConvert.zip`
-on the GitHub release. The plugin downloads from `.../releases/latest/download/Virtuart4DConvert.zip`.
+Required by LGPL and Apache 2.0 terms when distributing the compiled binary.
 
 ---
 
-## Updating MPXJ.Net
+## Custom build
 
-```powershell
-# Check for newer versions
-dotnet list package --outdated
-
-# Update
-dotnet add package MPXJ.Net --version <new-version>
-
-# Bump <Version> in Virtuart4DConvert.csproj to new release version (e.g. 0.2.0)
-
-# Rebuild + repack
-dotnet publish -c Release -r win-x64 --self-contained
-# Run the build script above
-```
-
----
-
-## Release checklist
-
-- [ ] Bump `<Version>` in `Virtuart4DConvert.csproj`
-- [ ] Run `dotnet publish -c Release -r win-x64 --self-contained`
-- [ ] Copy licence files into `publish\licenses\`
-- [ ] Run the build script → `Virtuart4DConvert_vX.Y.Z.zip` created
-- [ ] Upload `Virtuart4DConvert.zip` as asset on the GitHub release (exact name required)
-- [ ] Git tag format: `v0.2.0` (with `v` prefix — GitHub uses it as `tag_name` for version check)
+You can replace `Virtuart4DConvert.exe` in the plugin's
+`Binaries/ThirdPartyTools/Virtuart4DConvert/` folder with your own build,
+provided it accepts `<input-file> <output.json>` and writes a valid `v4d.json` schema v1.
