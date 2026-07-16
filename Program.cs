@@ -134,7 +134,7 @@ try
             IsSummary           = task.Summary,
             IsMilestone         = task.Milestone,
             OutlineLevel        = task.OutlineLevel ?? 0,
-            ParentUid           = task.ParentTask?.UniqueID ?? -1,
+            ParentUid           = task.ParentTask?.UniqueID ?? 0,
             Wbs                 = task.WBS,
             PercentComplete     = task.PercentageComplete,
             Cost                = task.Cost.HasValue ? (double?)Convert.ToDouble(task.Cost.Value) : null,
