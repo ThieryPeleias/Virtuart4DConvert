@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Globalization;
 using MPXJ.Net;
 
 const string ToolVersion = "0.1.0";
@@ -53,6 +54,10 @@ try
     foreach (var cal in project.Calendars)
     {
         if (cal == null) continue;
+        if (!TryBuildWorkWeek(cal, out var workWeek, out var workWeekError))
+            throw new InvalidOperationException(workWeekError);
+        if (!TryBuildExceptions(cal, out var exceptions, out var exceptionError))
+            throw new InvalidOperationException(exceptionError);
         var parent = cal.Parent;
         calendars.Add(new CalendarDto
         {
@@ -60,8 +65,8 @@ try
             Name            = cal.Name ?? "",
             IsBase          = parent == null,
             BaseCalendarUid = parent?.UniqueID ?? -1,
-            WorkWeek        = BuildWorkWeek(cal),
-            Exceptions      = BuildExceptions(cal),
+            WorkWeek        = workWeek,
+            Exceptions      = exceptions,
         });
     }
 
@@ -156,6 +161,7 @@ try
             OriginalFile = Path.GetFileName(inputPath),
         },
         Currency  = new CurrencyDto { Symbol = props?.CurrencySymbol ?? "", Code = props?.CurrencyCode ?? "" },
+        DefaultCalendarUid = project.ProjectProperties.DefaultCalendarUniqueID ?? -1,
         Calendars = calendars,
         Tasks     = tasks,
         Resources = resources,
@@ -199,61 +205,200 @@ static double DurationToHours(Duration? d)
     };
 }
 
-static List<WorkDayDto> BuildWorkWeek(ProjectCalendar cal)
+static string CalendarError(ProjectCalendar cal, string field, string value) =>
+    $"calendar uid={cal.UniqueID?.ToString(CultureInfo.InvariantCulture) ?? "missing"} source=mpxj field={field} value={value} (name={cal.Name ?? ""})";
+
+static bool TryBuildWorkWeek(ProjectCalendar cal, out List<WorkDayDto> result, out string error)
 {
-    // CalendarDayTypes: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
-    string[] dayNames = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    var result = new List<WorkDayDto>();
-    try
+    // MPXJ.Net CalendarDayTypes/CalendarHours are Sunday-first: 0=Sun..6=Sat.
+    string[] dayNames = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+    int[] sourceIndexes = [1, 2, 3, 4, 5, 6, 0];
+    result = [];
+    error = string.Empty;
+
+    if (cal.WorkWeeks != null && cal.WorkWeeks.Count > 0)
     {
-        var types = cal.CalendarDayTypes;
-        var hours = cal.CalendarHours;
-        if (types == null || hours == null) return result;
+        error = CalendarError(cal, "WorkWeeks", "nonempty");
+        return false;
+    }
 
-        for (int i = 1; i <= 5; i++) // Mon–Fri
+    var types = cal.CalendarDayTypes;
+    var hours = cal.CalendarHours;
+    if (types == null || hours == null || types.Length != 7 || hours.Length != 7)
+    {
+        error = CalendarError(cal, "CalendarDayTypes", "missing");
+        return false;
+    }
+
+    for (int modelDay = 0; modelDay < 7; ++modelDay)
+    {
+        var sourceDay = sourceIndexes[modelDay];
+        var dayType = types[sourceDay];
+        var ranges = new List<string[]>();
+        bool defined;
+
+        if (dayType == null || dayType == DayType.Default)
         {
-            var dayType = types[i];
-            if (dayType == DayType.NonWorking) continue;
-
-            var dayHours = hours[i]; // ProjectCalendarHours : IList<TimeOnlyRange>
-            var ranges = new List<string[]>();
-            if (dayHours != null)
+            defined = false;
+        }
+        else if (dayType == DayType.NonWorking)
+        {
+            defined = true;
+        }
+        else if (dayType == DayType.Working)
+        {
+            defined = true;
+            var dayHours = hours[sourceDay];
+            if (dayHours == null)
             {
-                foreach (TimeOnlyRange range in dayHours)
+                error = CalendarError(cal, "CalendarHours", $"missing day={dayNames[modelDay]}");
+                return false;
+            }
+            foreach (var range in dayHours)
+            {
+                if (range == null || range.Start == null || range.End == null)
                 {
-                    if (range?.Start == null || range.End == null) continue;
-                    ranges.Add([range.Start.Value.ToString("HH:mm"),
-                                range.End.Value.ToString("HH:mm")]);
+                    error = CalendarError(cal, "TimeOnlyRange", $"unreadable day={dayNames[modelDay]}");
+                    return false;
                 }
+                if (range.End.Value <= range.Start.Value
+                    && !(range.End.Value == TimeOnly.MinValue && range.Start.Value > TimeOnly.MinValue))
+                {
+                    error = CalendarError(cal, "TimeOnlyRange", $"invalid day={dayNames[modelDay]}");
+                    return false;
+                }
+                ranges.Add([
+                    range.Start.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                    range.End.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)]);
             }
             if (ranges.Count == 0)
-                ranges = [["08:00", "12:00"], ["13:00", "17:00"]];
-            result.Add(new WorkDayDto { Day = dayNames[i], Ranges = ranges });
+            {
+                error = CalendarError(cal, "CalendarHours", $"empty day={dayNames[modelDay]}");
+                return false;
+            }
         }
+        else
+        {
+            error = CalendarError(cal, "CalendarDayTypes", $"unreadable day={dayNames[modelDay]}");
+            return false;
+        }
+
+        result.Add(new WorkDayDto { Day = dayNames[modelDay], Defined = defined, Ranges = ranges });
     }
-    catch { /* skip if calendar API differs from expected */ }
-    return result;
+    return true;
 }
 
-static List<CalendarExceptionDto> BuildExceptions(ProjectCalendar cal)
+static bool TryBuildExceptions(ProjectCalendar cal, out List<CalendarExceptionDto> result, out string error)
 {
-    var result = new List<CalendarExceptionDto>();
-    try
+    result = [];
+    error = string.Empty;
+    if (cal.CalendarExceptions == null)
     {
-        if (cal.CalendarExceptions == null) return result;
-        foreach (var ex in cal.CalendarExceptions)
+        return true;
+    }
+
+    foreach (var exception in cal.CalendarExceptions)
+    {
+        if (exception == null)
         {
-            if (ex?.FromDate == null || ex.ToDate == null) continue;
-            result.Add(new CalendarExceptionDto
+            error = CalendarError(cal, "CalendarException", "unreadable");
+            return false;
+        }
+        if (exception.FromDate == null || exception.ToDate == null)
+        {
+            error = CalendarError(cal, "CalendarException", "missing-date");
+            return false;
+        }
+        if (exception.Count == 0)
+        {
+            error = CalendarError(cal, "CalendarException", $"ambiguous-no-ranges exception={exception.Name ?? ""}");
+            return false;
+        }
+        if (!exception.Working)
+        {
+            error = CalendarError(cal, "CalendarException", $"non-working-with-ranges exception={exception.Name ?? ""}");
+            return false;
+        }
+
+        var recurring = exception.Recurring;
+        if (recurring != null)
+        {
+            bool bRecurringValid;
+            try
             {
-                From    = ex.FromDate.Value.ToString("yyyy-MM-dd"),
-                To      = ex.ToDate.Value.ToString("yyyy-MM-dd"),
-                Working = ex.Working,
-            });
+                bRecurringValid = recurring.Valid;
+            }
+            catch
+            {
+                error = CalendarError(cal, "Exception.Type", $"invalid exception={exception.Name ?? ""}");
+                return false;
+            }
+            if (!bRecurringValid)
+            {
+                error = CalendarError(cal, "Exception.Type", $"invalid exception={exception.Name ?? ""}");
+                return false;
+            }
+            if (recurring.RecurrenceType == null || recurring.RecurrenceType != MPXJ.Net.RecurrenceType.Yearly)
+            {
+                error = CalendarError(cal, "Exception.Type", recurring.RecurrenceType?.ToString() ?? "missing");
+                return false;
+            }
+            if (exception.ExpandedExceptions == null || exception.ExpandedExceptions.Count == 0)
+            {
+                error = CalendarError(cal, "CalendarException", $"unexpanded exception={exception.Name ?? ""}");
+                return false;
+            }
+            foreach (var expanded in exception.ExpandedExceptions)
+            {
+                if (!TryAddException(cal, exception.Name ?? "", expanded, recurring.Relative ? 3 : 2, result, out error))
+                    return false;
+            }
+        }
+        else if (!TryAddException(cal, exception.Name ?? "", exception, 9, result, out error))
+        {
+            return false;
         }
     }
-    catch { /* skip if API differs */ }
-    return result;
+    return true;
+}
+
+static bool TryAddException(ProjectCalendar cal, string name, ProjectCalendarException exception,
+    int recurrenceType, List<CalendarExceptionDto> result, out string error)
+{
+    error = string.Empty;
+    if (exception == null || exception.FromDate == null || exception.ToDate == null)
+    {
+        error = CalendarError(cal, "CalendarException", "unreadable-date");
+        return false;
+    }
+    var ranges = new List<string[]>();
+    foreach (var range in exception)
+    {
+        if (range == null || range.Start == null || range.End == null)
+        {
+            error = CalendarError(cal, "TimeOnlyRange", $"unreadable exception={name}");
+            return false;
+        }
+        ranges.Add([
+            range.Start.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            range.End.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)]);
+    }
+    if (ranges.Count == 0)
+    {
+        error = CalendarError(cal, "CalendarException", $"ambiguous-no-ranges exception={name}");
+        return false;
+    }
+
+    result.Add(new CalendarExceptionDto
+    {
+        Name = name,
+        From = exception.FromDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        To = exception.ToDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        Working = true,
+        Ranges = ranges,
+        RecurrenceType = recurrenceType,
+    });
+    return true;
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -263,6 +408,7 @@ record RootDto
     [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; init; }
     [JsonPropertyName("source")]        public SourceDto Source { get; init; } = null!;
     [JsonPropertyName("currency")]      public CurrencyDto Currency { get; init; } = null!;
+    [JsonPropertyName("defaultCalendarUid")] public int DefaultCalendarUid { get; init; }
     [JsonPropertyName("calendars")]     public List<CalendarDto> Calendars { get; init; } = [];
     [JsonPropertyName("tasks")]         public List<TaskDto> Tasks { get; init; } = [];
     [JsonPropertyName("resources")]     public List<ResourceDto> Resources { get; init; } = [];
@@ -294,15 +440,19 @@ record CalendarDto
 
 record WorkDayDto
 {
-    [JsonPropertyName("day")]    public string Day { get; init; } = "";
-    [JsonPropertyName("ranges")] public List<string[]> Ranges { get; init; } = [];
+    [JsonPropertyName("day")]     public string Day { get; init; } = "";
+    [JsonPropertyName("defined")] public bool Defined { get; init; }
+    [JsonPropertyName("ranges")]  public List<string[]> Ranges { get; init; } = [];
 }
 
 record CalendarExceptionDto
 {
-    [JsonPropertyName("from")]    public string From { get; init; } = "";
-    [JsonPropertyName("to")]      public string To { get; init; } = "";
-    [JsonPropertyName("working")] public bool Working { get; init; }
+    [JsonPropertyName("name")]           public string Name { get; init; } = "";
+    [JsonPropertyName("from")]           public string From { get; init; } = "";
+    [JsonPropertyName("to")]             public string To { get; init; } = "";
+    [JsonPropertyName("working")]        public bool Working { get; init; }
+    [JsonPropertyName("ranges")]         public List<string[]>? Ranges { get; init; }
+    [JsonPropertyName("recurrenceType")] public int? RecurrenceType { get; init; }
 }
 
 record TaskDto
