@@ -63,19 +63,24 @@ cd Virtuart4DConvert
 ### 3. Run the Build Script
 
 ```bash
-build.bat
+build.bat              # developer mode
+build.bat 16.7.0      # exact expected MPXJ pin
 ```
+
+Neither mode mutates the project or upgrades packages. Both require NuGet access when uncached,
+publish a self-contained win-x64 executable, and verify dependencies, licenses, PDB absence, and
+the executable-owned `--version`/`--info` identity before replacing the ZIP. Offline operation is
+not guaranteed. Release builds use a committed source tree.
 
 <details open>
 <summary><b>What the script does</b></summary>
 
 | Step | Description |
 |------|-------------|
-| ✅ | Checks .NET SDK version |
-| 🔄 | Checks for MPXJ.Net updates on NuGet and upgrades automatically if found |
+| 🔎 | Developer mode reports available MPXJ.Net updates without changing the pin |
 | 📥 | Downloads all dependencies from NuGet (first run takes a few minutes) |
 | ⚙️ | Compiles and publishes a self-contained Windows exe |
-| 🧹 | Removes `.pdb` debug symbols |
+| 🧹 | Suppresses `.pdb` debug symbols at publish |
 | 📄 | Bundles the `licenses/` folder |
 | 📦 | Produces `zip\Virtuart4DConvert.zip` |
 | 🗑️ | Deletes staging files — only the ZIP remains |
