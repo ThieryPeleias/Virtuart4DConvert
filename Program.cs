@@ -2,13 +2,28 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Globalization;
+using System.Reflection;
 using MPXJ.Net;
 
-const string ToolVersion = "0.1.0";
+var converterVersion = StableVersion(Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+var mpxjAssembly = typeof(UniversalProjectReader).Assembly;
+var mpxjVersion = StableVersion(mpxjAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion)
+    ?? StableVersion(mpxjAssembly.GetName().Version?.ToString());
 
 if (args.Length == 1 && args[0] == "--version")
 {
-    Console.WriteLine(ToolVersion);
+    Console.WriteLine(converterVersion ?? "unknown");
+    return 0;
+}
+
+if (args.Length == 1 && args[0] == "--info")
+{
+    if (converterVersion == null || mpxjVersion == null)
+    {
+        Console.Error.WriteLine("Error: assembly version metadata is unavailable.");
+        return 1;
+    }
+    Console.WriteLine(JsonSerializer.Serialize(new { converterVersion, mpxjVersion }));
     return 0;
 }
 
@@ -149,15 +164,14 @@ try
         });
     }
 
-    var mpxjVer = typeof(UniversalProjectReader).Assembly.GetName().Version?.ToString() ?? "unknown";
     var doc = new RootDto
     {
         SchemaVersion = 1,
         Source = new SourceDto
         {
             Tool         = "Virtuart4DConvert",
-            Version      = ToolVersion,
-            MpxjVersion  = mpxjVer,
+            Version      = converterVersion ?? "unknown",
+            MpxjVersion  = mpxjAssembly.GetName().Version?.ToString() ?? "unknown",
             OriginalFile = Path.GetFileName(inputPath),
         },
         Currency  = new CurrencyDto { Symbol = props?.CurrencySymbol ?? "", Code = props?.CurrencyCode ?? "" },
@@ -182,6 +196,16 @@ catch (Exception ex)
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+static string? StableVersion(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value)) return null;
+    var stable = value.Split('+', 2)[0];
+    var parts = stable.Split('.');
+    return parts.Length == 3 && parts.All(part => int.TryParse(part, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+        ? stable
+        : null;
+}
 
 static string? FmtDateTime(DateTime? dt) =>
     dt.HasValue ? dt.Value.ToString("yyyy-MM-ddTHH:mm:ss") : null;

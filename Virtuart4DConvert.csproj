@@ -8,14 +8,14 @@
     <PublishSingleFile>true</PublishSingleFile>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <AssemblyName>Virtuart4DConvert</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MPXJ.Net" Version="16.3.0" />
+    <PackageReference Include="MPXJ.Net" Version="16.7.0" />
   </ItemGroup>
 
 </Project>
