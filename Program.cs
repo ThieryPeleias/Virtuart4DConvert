@@ -333,17 +333,6 @@ static bool TryBuildExceptions(ProjectCalendar cal, out List<CalendarExceptionDt
             error = CalendarError(cal, "CalendarException", "missing-date");
             return false;
         }
-        if (exception.Count == 0)
-        {
-            error = CalendarError(cal, "CalendarException", $"ambiguous-no-ranges exception={exception.Name ?? ""}");
-            return false;
-        }
-        if (!exception.Working)
-        {
-            error = CalendarError(cal, "CalendarException", $"non-working-with-ranges exception={exception.Name ?? ""}");
-            return false;
-        }
-
         var recurring = exception.Recurring;
         if (recurring != null)
         {
@@ -407,18 +396,12 @@ static bool TryAddException(ProjectCalendar cal, string name, ProjectCalendarExc
             range.Start.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             range.End.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)]);
     }
-    if (ranges.Count == 0)
-    {
-        error = CalendarError(cal, "CalendarException", $"ambiguous-no-ranges exception={name}");
-        return false;
-    }
-
     result.Add(new CalendarExceptionDto
     {
         Name = name,
         From = exception.FromDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         To = exception.ToDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-        Working = true,
+        Working = ranges.Count > 0,
         Ranges = ranges,
         RecurrenceType = recurrenceType,
     });
