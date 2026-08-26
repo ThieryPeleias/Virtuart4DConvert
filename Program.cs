@@ -285,15 +285,17 @@ static bool TryBuildWorkWeek(ProjectCalendar cal, out List<WorkDayDto> result, o
                     error = CalendarError(cal, "TimeOnlyRange", $"unreadable day={dayNames[modelDay]}");
                     return false;
                 }
-                if (range.End.Value <= range.Start.Value
-                    && !(range.End.Value == TimeOnly.MinValue && range.Start.Value > TimeOnly.MinValue))
+                if (range.End.Value <= range.Start.Value && range.End.Value != TimeOnly.MinValue)
                 {
                     error = CalendarError(cal, "TimeOnlyRange", $"invalid day={dayNames[modelDay]}");
                     return false;
                 }
+                var end = range.Start.Value == TimeOnly.MinValue && range.End.Value == TimeOnly.MinValue
+                    ? "24:00:00"
+                    : range.End.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                 ranges.Add([
                     range.Start.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
-                    range.End.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)]);
+                    end]);
             }
             if (ranges.Count == 0)
             {
