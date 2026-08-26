@@ -133,6 +133,4 @@ Extract `zip\Virtuart4DConvert.zip` directly into:
 
 **[🌐 Website](https://virtuart4d.com/)** · **[📦 MPXJ](https://mpxj.org)**
 
-*Made with ❤️ by [Virtuart](https://virtuart4d.com/)*
-
 </div>
