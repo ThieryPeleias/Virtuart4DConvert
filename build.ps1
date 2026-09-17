@@ -12,7 +12,7 @@ function Gate($dir, $version) {
   if (!(Test-Path (Join-Path $dir 'ikvm/win-x64') -PathType Container)) { throw 'missing ikvm/win-x64' }
   foreach ($n in 'mpxj-lgpl2.1.txt','apache-poi-apache2.txt','jsoup-mit.txt','rtfparserkit-apache2.txt','sqlite-jdbc-apache2.txt') { if (!(Test-Path (Join-Path $dir "licenses/$n") -PathType Leaf)) { throw "missing license $n" } }
   if (@(Get-ChildItem $dir -Recurse -File -Filter '*.pdb').Count) { throw 'PDB present' }
-  $v = (& $exe --version).Trim(); if ($LASTEXITCODE -ne 0 -or $v -ne '0.1.1') { throw 'invalid version' }
+  $v = (& $exe --version).Trim(); if ($LASTEXITCODE -ne 0 -or $v -ne '0.1.2') { throw 'invalid version' }
   $raw = & $exe --info; if ($LASTEXITCODE -ne 0) { throw 'info failed' }; $i = (($raw) -join "`n") | ConvertFrom-Json
   $props = @($i.psobject.Properties); if ($props.Count -ne 2 -or $props.Name -notcontains 'converterVersion' -or $props.Name -notcontains 'mpxjVersion' -or $i.converterVersion -isnot [string] -or $i.mpxjVersion -isnot [string] -or $i.converterVersion -ne $v -or $i.mpxjVersion -ne $version) { throw 'identity mismatch' }
 }

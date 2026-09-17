@@ -70,9 +70,11 @@ try
     {
         if (cal == null) continue;
         if (!TryBuildWorkWeek(cal, out var workWeek, out var workWeekError))
-            throw new InvalidOperationException(workWeekError);
+            throw new ConversionException(workWeekError);
         if (!TryBuildExceptions(cal, out var exceptions, out var exceptionError))
-            throw new InvalidOperationException(exceptionError);
+            throw new ConversionException(exceptionError);
+        if (!TryAppendWorkWeekExceptions(cal, exceptions, out var derivedWeekError))
+            throw new ConversionException(derivedWeekError);
         var parent = cal.Parent;
         calendars.Add(new CalendarDto
         {
@@ -104,18 +106,32 @@ try
 
     // --- Tasks ---
     var tasks = new List<TaskDto>();
+    var omittedUids = new List<(int Uid, string Name)>();
+    var seenUids = new HashSet<int>();
+    var eligibleCount = 0;
     foreach (var task in project.Tasks)
     {
         if (task == null) continue;
-        var uid = task.UniqueID ?? 0;
-        if (uid == 0) continue;
+        var uid = task.UniqueID;
+        var isSyntheticRoot = uid.HasValue && uid.Value == 0;
+        if (isSyntheticRoot) continue;
+        if (!uid.HasValue || uid.Value < 0)
+            throw new ConversionException($"task uid={(uid?.ToString(CultureInfo.InvariantCulture) ?? "missing")} source=mpxj field=uid value={(uid.HasValue ? "negative" : "missing")}");
+        if (!seenUids.Add(uid.Value))
+            throw new ConversionException($"task uid={uid.Value} source=mpxj field=uid value=duplicate");
+        eligibleCount++;
+
+        if (task.ParentTask != null && task.ParentTask.UniqueID == null)
+            throw new ConversionException($"task uid={uid.Value} source=mpxj field=parentUid value=unreadable");
 
         var preds = new List<PredecessorDto>();
         if (task.Predecessors != null)
         {
             foreach (var rel in task.Predecessors)
             {
-                if (rel?.PredecessorTask == null) continue;
+                if (rel == null) continue;
+                if (rel.PredecessorTask == null)
+                    throw new ConversionException($"task uid={uid.Value} source=mpxj field=predecessorUid value=unreadable");
                 preds.Add(new PredecessorDto
                 {
                     Uid      = rel.PredecessorTask.UniqueID ?? 0,
@@ -124,6 +140,18 @@ try
                 });
             }
         }
+
+        var start = task.Start;
+        var finish = task.Finish;
+        if (start == null && finish == null)
+        {
+            omittedUids.Add((uid.Value, task.Name ?? ""));
+            continue;
+        }
+        if (start == null || finish == null)
+            throw new ConversionException($"task uid={uid.Value} source=mpxj field=dates value=partial");
+        if (start.Value > finish.Value)
+            throw new ConversionException($"task uid={uid.Value} source=mpxj field=dates value=inverted");
 
         var assignments = new List<AssignmentDto>();
         if (task.ResourceAssignments != null)
@@ -144,12 +172,12 @@ try
 
         tasks.Add(new TaskDto
         {
-            Uid                 = uid,
+            Uid                 = uid.Value,
             Guid                = task.GUID?.ToString(),
             Name                = task.Name ?? "",
             CalendarUid         = task.Calendar?.UniqueID ?? -1,
-            Start               = FmtDateTime(task.Start),
-            Finish              = FmtDateTime(task.Finish),
+            Start               = FmtDateTime(start),
+            Finish              = FmtDateTime(finish),
             DurationHours       = DurationToHours(task.Duration),
             IsSummary           = task.Summary,
             IsMilestone         = task.Milestone,
@@ -162,6 +190,31 @@ try
             Predecessors        = preds.Count > 0 ? preds : null,
             ResourceAssignments = assignments.Count > 0 ? assignments : null,
         });
+    }
+
+    if (eligibleCount > 0 && tasks.Count == 0)
+        throw new ConversionException("task source=mpxj field=dates value=all-undated");
+
+    var retainedUids = tasks.Select(t => t.Uid).ToHashSet();
+    var omittedSet = omittedUids.Select(o => o.Uid).ToHashSet();
+    foreach (var retained in tasks)
+    {
+        if (retained.ParentUid != 0)
+        {
+            if (omittedSet.Contains(retained.ParentUid))
+                throw new ConversionException($"task uid={retained.Uid} source=mpxj field=parentUid value=omitted-{retained.ParentUid}");
+            if (!retainedUids.Contains(retained.ParentUid))
+                throw new ConversionException($"task uid={retained.Uid} source=mpxj field=parentUid value=missing-{retained.ParentUid}");
+        }
+        if (retained.Predecessors == null) continue;
+        foreach (var pred in retained.Predecessors)
+        {
+            if (pred.Uid == 0) continue;
+            if (omittedSet.Contains(pred.Uid))
+                throw new ConversionException($"task uid={retained.Uid} source=mpxj field=predecessorUid value=omitted-{pred.Uid}");
+            if (!retainedUids.Contains(pred.Uid))
+                throw new ConversionException($"task uid={retained.Uid} source=mpxj field=predecessorUid value=missing-{pred.Uid}");
+        }
     }
 
     var doc = new RootDto
@@ -187,7 +240,20 @@ try
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     });
     File.WriteAllText(outputPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    if (omittedUids.Count > 0)
+    {
+        var sorted = omittedUids.OrderBy(u => u.Uid).ToList();
+        var sample = sorted.Take(10)
+            .Select(u => $"{u.Uid}:{u.Name.Replace('\n', ' ').Replace('\r', ' ')}");
+        var more = sorted.Count > 10 ? $", and {sorted.Count - 10} more" : "";
+        Console.Error.WriteLine($"Warning: omitted {sorted.Count} task(s) without start and finish: {string.Join(", ", sample)}{more}");
+    }
     return 0;
+}
+catch (ConversionException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 1;
 }
 catch (Exception ex)
 {
@@ -209,6 +275,14 @@ static string? StableVersion(string? value)
 
 static string? FmtDateTime(DateTime? dt) =>
     dt.HasValue ? dt.Value.ToString("yyyy-MM-ddTHH:mm:ss") : null;
+
+static string[] FmtRange(TimeOnly start, TimeOnly end)
+{
+    var endText = start == TimeOnly.MinValue && end == TimeOnly.MinValue
+        ? "24:00:00"
+        : end.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+    return [start.ToString("HH:mm:ss", CultureInfo.InvariantCulture), endText];
+}
 
 static double DurationToHours(Duration? d)
 {
@@ -239,12 +313,6 @@ static bool TryBuildWorkWeek(ProjectCalendar cal, out List<WorkDayDto> result, o
     int[] sourceIndexes = [1, 2, 3, 4, 5, 6, 0];
     result = [];
     error = string.Empty;
-
-    if (cal.WorkWeeks != null && cal.WorkWeeks.Count > 0)
-    {
-        error = CalendarError(cal, "WorkWeeks", "nonempty");
-        return false;
-    }
 
     var types = cal.CalendarDayTypes;
     var hours = cal.CalendarHours;
@@ -290,12 +358,7 @@ static bool TryBuildWorkWeek(ProjectCalendar cal, out List<WorkDayDto> result, o
                     error = CalendarError(cal, "TimeOnlyRange", $"invalid day={dayNames[modelDay]}");
                     return false;
                 }
-                var end = range.Start.Value == TimeOnly.MinValue && range.End.Value == TimeOnly.MinValue
-                    ? "24:00:00"
-                    : range.End.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
-                ranges.Add([
-                    range.Start.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
-                    end]);
+                ranges.Add(FmtRange(range.Start.Value, range.End.Value));
             }
             if (ranges.Count == 0)
             {
@@ -377,6 +440,82 @@ static bool TryBuildExceptions(ProjectCalendar cal, out List<CalendarExceptionDt
     return true;
 }
 
+static bool TryAppendWorkWeekExceptions(ProjectCalendar cal, List<CalendarExceptionDto> emitted, out string error)
+{
+    const long MaxWorkWeekExpansionDays = 100000;
+    error = string.Empty;
+    var weeks = cal.WorkWeeks;
+    if (weeks == null || weeks.Count == 0) return true;
+
+    long totalDays = 0;
+    bool allDefault = true;
+    foreach (var week in weeks)
+    {
+        if (week == null) { error = CalendarError(cal, "WorkWeeks", "unreadable"); return false; }
+        var range = week.DateRange;
+        if (range == null || range.Start == null || range.End == null || range.Start.Value > range.End.Value)
+        {
+            error = CalendarError(cal, "WorkWeeks", "invalid-range");
+            return false;
+        }
+        totalDays += (range.End.Value.DayNumber - range.Start.Value.DayNumber) + 1;
+        foreach (var dow in Enum.GetValues<DayOfWeek>())
+        {
+            var dayType = week.GetCalendarDayType(dow);
+            if (dayType == null || dayType == DayType.Default) continue;
+            allDefault = false;
+            var hours = week.GetCalendarHours(dow);
+            if (dayType == DayType.Working && (hours == null || hours.Count == 0))
+            { error = CalendarError(cal, "WorkWeeks", $"working-without-hours day={dow}"); return false; }
+        }
+    }
+    if (totalDays > MaxWorkWeekExpansionDays)
+    {
+        error = CalendarError(cal, "WorkWeeks", $"expansion-limit days={totalDays} max={MaxWorkWeekExpansionDays}");
+        return false;
+    }
+    if (allDefault) return true;
+
+    var covered = emitted
+        .Select(e => (From: DateOnly.ParseExact(e.From, "yyyy-MM-dd", CultureInfo.InvariantCulture),
+                      To:   DateOnly.ParseExact(e.To,   "yyyy-MM-dd", CultureInfo.InvariantCulture)))
+        .ToList();
+    var seen = new HashSet<DateOnly>();
+    long emittedDays = 0;
+    foreach (var derived in cal.ExpandedCalendarExceptionsWithWorkWeeks)
+    {
+        if (derived == null || derived.FromDate == null || derived.ToDate == null)
+        { error = CalendarError(cal, "WorkWeeks", "derived-unreadable-date"); return false; }
+        var ranges = new List<string[]>();
+        foreach (var r in derived)
+        {
+            if (r == null || r.Start == null || r.End == null)
+            { error = CalendarError(cal, "WorkWeeks", $"derived-unreadable-range name={derived.Name ?? ""}"); return false; }
+            ranges.Add(FmtRange(r.Start.Value, r.End.Value));
+        }
+        var from = derived.FromDate.Value;
+        var to   = derived.ToDate.Value;
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            if (++emittedDays > MaxWorkWeekExpansionDays)
+            { error = CalendarError(cal, "WorkWeeks", $"expansion-limit days={emittedDays} max={MaxWorkWeekExpansionDays}"); return false; }
+            if (!seen.Add(date)) continue;
+            if (covered.Any(c => date >= c.From && date <= c.To)) continue;
+            emitted.Add(new CalendarExceptionDto
+            {
+                Name = derived.Name ?? "",
+                From = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                To   = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                Working = ranges.Count > 0,
+                Ranges = ranges,
+                RecurrenceType = 9,
+            });
+            if (date == DateOnly.MaxValue) break;
+        }
+    }
+    return true;
+}
+
 static bool TryAddException(ProjectCalendar cal, string name, ProjectCalendarException exception,
     int recurrenceType, List<CalendarExceptionDto> result, out string error)
 {
@@ -384,6 +523,11 @@ static bool TryAddException(ProjectCalendar cal, string name, ProjectCalendarExc
     if (exception == null || exception.FromDate == null || exception.ToDate == null)
     {
         error = CalendarError(cal, "CalendarException", "unreadable-date");
+        return false;
+    }
+    if (exception.FromDate.Value > exception.ToDate.Value)
+    {
+        error = CalendarError(cal, "CalendarException", $"inverted exception={name}");
         return false;
     }
     var ranges = new List<string[]>();
@@ -506,4 +650,9 @@ record ResourceDto
     [JsonPropertyName("type")]        public string Type { get; init; } = "Work";
     [JsonPropertyName("stdRate")]     public double? StdRate { get; init; }
     [JsonPropertyName("calendarUid")] public int CalendarUid { get; init; }
+}
+
+sealed class ConversionException : Exception
+{
+    public ConversionException(string message) : base(message) { }
 }
