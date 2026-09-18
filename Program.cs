@@ -228,6 +228,7 @@ try
             OriginalFile = Path.GetFileName(inputPath),
         },
         Currency  = new CurrencyDto { Symbol = props?.CurrencySymbol ?? "", Code = props?.CurrencyCode ?? "" },
+        HoursPerDay = (props?.MinutesPerDay is int m && m > 0) ? m / 60.0 : 8.0,
         DefaultCalendarUid = project.ProjectProperties.DefaultCalendarUniqueID ?? -1,
         Calendars = calendars,
         Tasks     = tasks,
@@ -561,6 +562,7 @@ record RootDto
     [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; init; }
     [JsonPropertyName("source")]        public SourceDto Source { get; init; } = null!;
     [JsonPropertyName("currency")]      public CurrencyDto Currency { get; init; } = null!;
+    [JsonPropertyName("hoursPerDay")]   public double HoursPerDay { get; init; }
     [JsonPropertyName("defaultCalendarUid")] public int DefaultCalendarUid { get; init; }
     [JsonPropertyName("calendars")]     public List<CalendarDto> Calendars { get; init; } = [];
     [JsonPropertyName("tasks")]         public List<TaskDto> Tasks { get; init; } = [];
