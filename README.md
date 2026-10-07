@@ -91,6 +91,29 @@ not guaranteed. Release builds use a committed source tree.
 
 ---
 
+## 🏷️ Task custom fields (`customFields`, since 0.1.4)
+
+Each task may carry an optional `"customFields": {"<key>": "<value>"}` object. The addition is
+backward compatible: `schemaVersion` stays `1`, the object is omitted when empty, and consumers
+that do not know it ignore it. Keys are sorted (ordinal), so the output is deterministic.
+
+- **Fields:** Task entity only — Text1-30, Number1-20, Flag1-20, Date1-10, Cost1-10, Duration1-10,
+  Start1-10, Finish1-10, OutlineCode1-10, and only fields MPXJ reports as populated. Enterprise,
+  baseline and Resource/Assignment fields are never emitted.
+- **Key:** `"<alias> (<Name>)"` when the project defines an alias, otherwise `"<Name>"`
+  (e.g. `AREA_CODE (Text1)`, `Number2`, `OutlineCode3`). A trailing `(<Name>)` already present in the
+  alias is stripped first (case-insensitive), so MPP and MSPDI XML give the same key.
+- **Value** (always a string, invariant culture): Text/OutlineCode as-is; Number/Cost as the shortest
+  round-trip decimal (`"R"`); Flag only when true (`Yes`); Date/Start/Finish as
+  `yyyy-MM-ddTHH:mm:ss`; Duration as `<value> <unit>` with units `m h d w mo y %` and elapsed
+  `em eh ed ew emo ey e%`.
+- **Limits:** empty values are omitted, and so are `0`, `false` and zero durations (MPP returns those
+  defaults for an empty field, so they cannot be told apart). In MSPDI XML an outline code that
+  references only a GUID resolves empty and is omitted; Cost/Number values are whatever MPXJ reads
+  (it may rescale currency), never the raw XML text. Renaming an alias in MS Project changes the key.
+
+---
+
 ## 📦 Install into the Plugin
 
 Two options:

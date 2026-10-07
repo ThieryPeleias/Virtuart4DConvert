@@ -105,6 +105,7 @@ try
     }
 
     // --- Tasks ---
+    var customFieldDefs = BuildTaskCustomFields(project);
     var tasks = new List<TaskDto>();
     var omittedUids = new List<(int Uid, string Name)>();
     var seenUids = new HashSet<int>();
@@ -170,6 +171,13 @@ try
             }
         }
 
+        var customFields = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var def in customFieldDefs)
+        {
+            var value = CustomFieldValue(task, def);
+            if (!string.IsNullOrEmpty(value)) customFields[def.Key] = value;
+        }
+
         tasks.Add(new TaskDto
         {
             Uid                 = uid.Value,
@@ -189,6 +197,7 @@ try
             Accrual             = task.FixedCostAccrual?.ToString(),
             Predecessors        = preds.Count > 0 ? preds : null,
             ResourceAssignments = assignments.Count > 0 ? assignments : null,
+            CustomFields        = customFields.Count > 0 ? customFields : null,
         });
     }
 
@@ -275,7 +284,89 @@ static string? StableVersion(string? value)
 }
 
 static string? FmtDateTime(DateTime? dt) =>
-    dt.HasValue ? dt.Value.ToString("yyyy-MM-ddTHH:mm:ss") : null;
+    dt.HasValue ? dt.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) : null;
+
+static List<CustomFieldDef> BuildTaskCustomFields(ProjectFile project)
+{
+    // Allowlist of custom field families exposed as Task columns: family token -> max index.
+    (string Family, int Max)[] CustomFamilies =
+    [
+        ("Text", 30), ("Number", 20), ("Flag", 20), ("Date", 10), ("Cost", 10),
+        ("Duration", 10), ("Start", 10), ("Finish", 10), ("OutlineCode", 10),
+    ];
+
+    // Alias per canonical name, Task class only (Resource/Assignment share the same names).
+    var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+    foreach (var cf in project.CustomFields)
+    {
+        var ft = cf?.FieldType;
+        if (ft == null || ft.FieldTypeClass != FieldTypeClass.Task) continue;
+        var alias = cf!.Alias?.Trim();
+        if (string.IsNullOrEmpty(alias)) continue;
+        var canonical = ft.FieldName.Replace(" ", "");
+        foreach (var suffix in new[] { $" ({canonical})", $" ({ft.FieldName})" })
+            if (alias.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                alias = alias[..^suffix.Length].Trim();
+                break;
+            }
+        if (alias.Length > 0) aliases.TryAdd(canonical, alias);
+    }
+
+    var defs = new Dictionary<string, CustomFieldDef>(StringComparer.Ordinal);
+    foreach (var ft in project.PopulatedFields)
+    {
+        if (ft == null || ft.FieldTypeClass != FieldTypeClass.Task) continue;
+        var canonical = ft.FieldName.Replace(" ", "");
+        foreach (var (family, max) in CustomFamilies)
+        {
+            if (!canonical.StartsWith(family, StringComparison.Ordinal)) continue;
+            var digits = canonical[family.Length..];
+            if (digits.Length == 0 || digits[0] == '0' || !digits.All(char.IsAsciiDigit)
+                || !int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                || index < 1 || index > max) continue;
+            var key = aliases.TryGetValue(canonical, out var a) ? $"{a} ({canonical})" : canonical;
+            defs[canonical] = new CustomFieldDef(family, index, key);
+            break;
+        }
+    }
+    return defs.Values.ToList();
+}
+
+static string? CustomFieldValue(MPXJ.Net.Task task, CustomFieldDef def)
+{
+    var n = def.Index;
+    switch (def.Family)
+    {
+        case "Text":        return task.GetText(n);
+        case "OutlineCode": return task.GetOutlineCode(n);
+        case "Number":      return FmtNumber(task.GetNumber(n));
+        case "Cost":        return FmtNumber(task.GetCost(n));
+        case "Flag":        return task.GetFlag(n) ? "Yes" : null;
+        case "Date":        return FmtDateTime(task.GetDate(n));
+        case "Start":       return FmtDateTime(task.GetStart(n));
+        case "Finish":      return FmtDateTime(task.GetFinish(n));
+        case "Duration":
+        {
+            var d = task.GetDuration(n);
+            if (d == null || d.DurationValue == 0) return null;
+            var token = d.Units switch
+            {
+                TimeUnit.Minutes => "m", TimeUnit.Hours => "h", TimeUnit.Days => "d", TimeUnit.Weeks => "w",
+                TimeUnit.Months => "mo", TimeUnit.Years => "y", TimeUnit.Percent => "%",
+                TimeUnit.ElapsedMinutes => "em", TimeUnit.ElapsedHours => "eh", TimeUnit.ElapsedDays => "ed",
+                TimeUnit.ElapsedWeeks => "ew", TimeUnit.ElapsedMonths => "emo", TimeUnit.ElapsedYears => "ey",
+                TimeUnit.ElapsedPercent => "e%",
+                _ => null,
+            };
+            return token == null ? null : d.DurationValue.ToString("R", CultureInfo.InvariantCulture) + " " + token;
+        }
+        default: return null;
+    }
+}
+
+static string? FmtNumber(double? v) =>
+    v.HasValue && v.Value != 0 ? Convert.ToDouble(v.Value).ToString("R", CultureInfo.InvariantCulture) : null;
 
 static string[] FmtRange(TimeOnly start, TimeOnly end)
 {
@@ -629,7 +720,10 @@ record TaskDto
     [JsonPropertyName("accrual")]             public string? Accrual { get; init; }
     [JsonPropertyName("predecessors")]        public List<PredecessorDto>? Predecessors { get; init; }
     [JsonPropertyName("resourceAssignments")] public List<AssignmentDto>? ResourceAssignments { get; init; }
+    [JsonPropertyName("customFields")]        public SortedDictionary<string, string>? CustomFields { get; init; }
 }
+
+record CustomFieldDef(string Family, int Index, string Key);
 
 record PredecessorDto
 {
