@@ -31,5 +31,9 @@ try {
   Gate $stage $declared; Compress-Archive (Join-Path $stage '*') $attemptZip -Force
   New-Item $extract -ItemType Directory | Out-Null; Expand-Archive $attemptZip $extract -Force; Gate $extract $declared
   if ($beforeHash -and (FileHash $project) -ne $beforeHash) { throw 'project changed during developer build' }
-  New-Item (Join-Path $root 'zip') -ItemType Directory -Force | Out-Null; Copy-Item $attemptZip (Join-Path $root 'zip/Virtuart4DConvert.zip') -Force
+  $zipDir = Join-Path $root 'zip'; $finalZip = Join-Path $zipDir 'Virtuart4DConvert.zip'; $finalSha = Join-Path $zipDir 'Virtuart4DConvert.zip.sha256'
+  New-Item $zipDir -ItemType Directory -Force | Out-Null; if (Test-Path $finalSha) { Remove-Item $finalSha -Force }
+  Copy-Item $attemptZip $finalZip -Force
+  [IO.File]::WriteAllText($finalSha, "$(FileHash $finalZip)  Virtuart4DConvert.zip`n", [Text.Encoding]::ASCII)
+  if (!(Test-Path $finalSha -PathType Leaf)) { throw 'sha256 write failed' }
 } finally { foreach ($p in $stage, $extract) { if (Test-Path $p) { Remove-Item $p -Recurse -Force } }; if (Test-Path $attemptZip) { Remove-Item $attemptZip -Force } }

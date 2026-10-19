@@ -82,12 +82,27 @@ not guaranteed. Release builds use a committed source tree.
 | ⚙️ | Compiles and publishes a self-contained Windows exe |
 | 🧹 | Suppresses `.pdb` debug symbols at publish |
 | 📄 | Bundles the `licenses/` folder |
-| 📦 | Produces `zip\Virtuart4DConvert.zip` |
-| 🗑️ | Deletes staging files — only the ZIP remains |
+| 📦 | Produces `zip\Virtuart4DConvert.zip` and `zip\Virtuart4DConvert.zip.sha256` |
+| 🗑️ | Deletes staging files — only the ZIP and its `.sha256` remain |
 
 </details>
 
-**Output:** `zip\Virtuart4DConvert.zip`
+**Output:** `zip\Virtuart4DConvert.zip` and `zip\Virtuart4DConvert.zip.sha256`
+
+### Publishing a release
+
+Upload both files, so users can check the download:
+
+```bash
+gh release create <tag> zip\Virtuart4DConvert.zip zip\Virtuart4DConvert.zip.sha256
+```
+
+To check a download, compare the hash with the first token of the `.sha256` file (case-insensitive):
+
+```powershell
+(Get-FileHash Virtuart4DConvert.zip -Algorithm SHA256).Hash
+Get-Content Virtuart4DConvert.zip.sha256
+```
 
 ---
 
