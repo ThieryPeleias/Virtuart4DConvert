@@ -106,6 +106,10 @@ Get-Content Virtuart4DConvert.zip.sha256
 
 ---
 
+## 📅 Calendar recurrences (`since 0.1.5`)
+
+Yearly MPXJ exceptions keep their existing recurrence types. Weekly exceptions expand into one dated type-9 exception per MPXJ-provided occurrence, preserving its name, working state, and ranges. Other exposed recurrence types remain unsupported and fail conversion.
+
 ## 🏷️ Task custom fields (`customFields`, since 0.1.4)
 
 Each task may carry an optional `"customFields": {"<key>": "<value>"}` object. The addition is

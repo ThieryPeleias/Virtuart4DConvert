@@ -508,7 +508,9 @@ static bool TryBuildExceptions(ProjectCalendar cal, out List<CalendarExceptionDt
                 error = CalendarError(cal, "Exception.Type", $"invalid exception={exception.Name ?? ""}");
                 return false;
             }
-            if (recurring.RecurrenceType == null || recurring.RecurrenceType != MPXJ.Net.RecurrenceType.Yearly)
+            if (recurring.RecurrenceType == null
+                || (recurring.RecurrenceType != MPXJ.Net.RecurrenceType.Yearly
+                    && recurring.RecurrenceType != MPXJ.Net.RecurrenceType.Weekly))
             {
                 error = CalendarError(cal, "Exception.Type", recurring.RecurrenceType?.ToString() ?? "missing");
                 return false;
@@ -518,9 +520,12 @@ static bool TryBuildExceptions(ProjectCalendar cal, out List<CalendarExceptionDt
                 error = CalendarError(cal, "CalendarException", $"unexpanded exception={exception.Name ?? ""}");
                 return false;
             }
+            var recurrenceType = recurring.RecurrenceType == MPXJ.Net.RecurrenceType.Weekly
+                ? 9
+                : recurring.Relative ? 3 : 2;
             foreach (var expanded in exception.ExpandedExceptions)
             {
-                if (!TryAddException(cal, exception.Name ?? "", expanded, recurring.Relative ? 3 : 2, result, out error))
+                if (!TryAddException(cal, exception.Name ?? "", expanded, recurrenceType, result, out error))
                     return false;
             }
         }
