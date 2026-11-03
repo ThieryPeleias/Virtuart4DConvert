@@ -304,6 +304,9 @@ static List<CustomFieldDef> BuildTaskCustomFields(ProjectFile project)
         var alias = cf!.Alias?.Trim();
         if (string.IsNullOrEmpty(alias)) continue;
         var canonical = ft.FieldName.Replace(" ", "");
+        // An alias that is only the field's own "(Text1)" label means no alias.
+        if (alias.Equals($"({canonical})", StringComparison.OrdinalIgnoreCase)
+            || alias.Equals($"({ft.FieldName})", StringComparison.OrdinalIgnoreCase)) continue;
         foreach (var suffix in new[] { $" ({canonical})", $" ({ft.FieldName})" })
             if (alias.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {
@@ -366,7 +369,7 @@ static string? CustomFieldValue(MPXJ.Net.Task task, CustomFieldDef def)
 }
 
 static string? FmtNumber(double? v) =>
-    v.HasValue && v.Value != 0 ? Convert.ToDouble(v.Value).ToString("R", CultureInfo.InvariantCulture) : null;
+    v.HasValue && v.Value != 0 && double.IsFinite(v.Value) ? Convert.ToDouble(v.Value).ToString("R", CultureInfo.InvariantCulture) : null;
 
 static string[] FmtRange(TimeOnly start, TimeOnly end)
 {

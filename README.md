@@ -121,7 +121,8 @@ that do not know it ignore it. Keys are sorted (ordinal), so the output is deter
   baseline and Resource/Assignment fields are never emitted.
 - **Key:** `"<alias> (<Name>)"` when the project defines an alias, otherwise `"<Name>"`
   (e.g. `AREA_CODE (Text1)`, `Number2`, `OutlineCode3`). A trailing `(<Name>)` already present in the
-  alias is stripped first (case-insensitive), so MPP and MSPDI XML give the same key.
+  alias is stripped first (case-insensitive), so MPP and MSPDI XML give the same key. Since 0.1.6 an
+  alias that is only `(<Name>)` (e.g. `(Text1)`) counts as no alias, so the key is `Text1`.
 - **Value** (always a string, invariant culture): Text/OutlineCode as-is; Number/Cost as the shortest
   round-trip decimal (`"R"`); Flag only when true (`Yes`); Date/Start/Finish as
   `yyyy-MM-ddTHH:mm:ss`; Duration as `<value> <unit>` with units `m h d w mo y %` and elapsed
@@ -129,7 +130,8 @@ that do not know it ignore it. Keys are sorted (ordinal), so the output is deter
 - **Limits:** empty values are omitted, and so are `0`, `false` and zero durations (MPP returns those
   defaults for an empty field, so they cannot be told apart). In MSPDI XML an outline code that
   references only a GUID resolves empty and is omitted; Cost/Number values are whatever MPXJ reads
-  (it may rescale currency), never the raw XML text. Renaming an alias in MS Project changes the key.
+  (it may rescale currency), never the raw XML text. Since 0.1.6 non-finite Number/Cost values
+  (`NaN`, `Infinity`) are omitted. Renaming an alias in MS Project changes the key.
 
 ---
 
