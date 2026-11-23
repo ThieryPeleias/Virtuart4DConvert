@@ -133,6 +133,20 @@ that do not know it ignore it. Keys are sorted (ordinal), so the output is deter
   (it may rescale currency), never the raw XML text. Since 0.1.6 non-finite Number/Cost values
   (`NaN`, `Infinity`) are omitted. Renaming an alias in MS Project changes the key.
 
+## 🧩 Primavera P6 Activity Codes (`since 0.1.7`)
+
+P6 Activity Codes (Area, Discipline, Floor...) are written into the same `customFields` map of each
+task. Nothing else in the JSON changes (`schemaVersion` stays `1`).
+
+- **Value key:** `"<type name> (ActivityCode)"`; the value is the short code of the assigned value. A
+  hierarchical value joins the short codes from the root to the leaf with `.` (e.g. `BL.A`).
+- **Description key:** `"<type name> (ActivityCode Description)"`; the leaf description, only when not empty.
+- **Repeated type names** (any case) get the scope label `[Global]`, `[EPS]` or `[Project]`; types that
+  still share a name and scope also get `#<type id>` (e.g. `Lote [Project] #105 (ActivityCode)`).
+- **Limits:** a type with no value on the task, or an empty short code, emits nothing. A `.` inside a
+  short code is ambiguous. P6 UDFs, Resource Codes and Project Codes are not read.
+- **Source:** any format in which MPXJ reads Activity Codes (XER, and P6 XML best-effort).
+
 ---
 
 ## 📦 Install into the Plugin

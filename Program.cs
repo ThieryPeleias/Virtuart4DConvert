@@ -106,6 +106,7 @@ try
 
     // --- Tasks ---
     var customFieldDefs = BuildTaskCustomFields(project);
+    var activityCodeDefs = BuildActivityCodeDefs(project);
     var tasks = new List<TaskDto>();
     var omittedUids = new List<(int Uid, string Name)>();
     var seenUids = new HashSet<int>();
@@ -177,6 +178,7 @@ try
             var value = CustomFieldValue(task, def);
             if (!string.IsNullOrEmpty(value)) customFields[def.Key] = value;
         }
+        AddActivityCodes(task, uid.Value, activityCodeDefs, customFields);
 
         tasks.Add(new TaskDto
         {
@@ -365,6 +367,82 @@ static string? CustomFieldValue(MPXJ.Net.Task task, CustomFieldDef def)
             return token == null ? null : d.DurationValue.ToString("R", CultureInfo.InvariantCulture) + " " + token;
         }
         default: return null;
+    }
+}
+
+// P6 Activity Codes: one key stem per code type, unique without regard to case (ExtraFields ignores case).
+static List<ActivityCodeDef> BuildActivityCodeDefs(ProjectFile project)
+{
+    var types = new List<(ActivityCode Code, int Id, string Name)>();
+    foreach (var code in project.ActivityCodes)
+    {
+        var name = code?.Name?.Trim();
+        if (code?.UniqueID is not int id || string.IsNullOrEmpty(name)) continue;
+        types.Add((code, id, name));
+    }
+    types.Sort((a, b) => a.Id.CompareTo(b.Id));
+
+    // Repeated names (any case) get the scope label.
+    var nameCounts = types.GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+    var stems = types.Select(t =>
+    {
+        if (nameCounts[t.Name] < 2) return t.Name;
+        var label = t.Code.Scope switch
+        {
+            ActivityCodeScope.Global => "Global",
+            ActivityCodeScope.Eps => "EPS",
+            ActivityCodeScope.Project => "Project",
+            _ => null,
+        };
+        return label == null ? t.Name : $"{t.Name} [{label}]";
+    }).ToList();
+
+    // A stem still shared by several types (same scope, or a literal "Name [Scope]") gets the type's unique id.
+    var stemCounts = stems.GroupBy(s => s, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+    var defs = new List<ActivityCodeDef>();
+    var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < types.Count; i++)
+    {
+        var stem = stemCounts[stems[i]] > 1 ? $"{stems[i]} #{types[i].Id}" : stems[i];
+        var valueKey = $"{stem} (ActivityCode)";
+        var descriptionKey = $"{stem} (ActivityCode Description)";
+        if (!used.Add(valueKey) || !used.Add(descriptionKey))
+        {
+            Console.Error.WriteLine($"Warning: activity code key collision type={types[i].Id}");
+            continue;
+        }
+        defs.Add(new ActivityCodeDef(types[i].Id, valueKey, descriptionKey, types[i].Code.Values.Count));
+    }
+    return defs;
+}
+
+static void AddActivityCodes(MPXJ.Net.Task task, int uid, List<ActivityCodeDef> defs, SortedDictionary<string, string> target)
+{
+    var assigned = task.ActivityCodeValues;
+    if (defs.Count == 0 || assigned == null || assigned.Count == 0) return;
+    var byId = defs.ToDictionary(d => d.TypeId);
+    foreach (var (code, leaf) in assigned)
+    {
+        if (leaf == null || code?.UniqueID is not int typeId || !byId.TryGetValue(typeId, out var def)) continue;
+        // Root-to-leaf short codes joined by "."; the walk stops at a repeated value or after more levels than the type has values.
+        var segments = new List<string>();
+        var seen = new HashSet<int>();
+        var cycle = false;
+        for (var value = leaf; value != null; value = value.ParentValue)
+        {
+            if (segments.Count >= def.ValueCount || (value.UniqueID is int valueId && !seen.Add(valueId))) { cycle = true; break; }
+            segments.Add(value.Name?.Trim() ?? "");
+        }
+        if (cycle)
+        {
+            Console.Error.WriteLine($"Warning: activity code cycle type={typeId} task={uid}");
+            continue;
+        }
+        segments.Reverse();
+        if (segments.Any(s => s.Length == 0)) continue;
+        target[def.ValueKey] = string.Join(".", segments);
+        var description = leaf.Description?.Trim();
+        if (!string.IsNullOrEmpty(description)) target[def.DescriptionKey] = description;
     }
 }
 
@@ -732,6 +810,8 @@ record TaskDto
 }
 
 record CustomFieldDef(string Family, int Index, string Key);
+
+record ActivityCodeDef(int TypeId, string ValueKey, string DescriptionKey, int ValueCount);
 
 record PredecessorDto
 {
