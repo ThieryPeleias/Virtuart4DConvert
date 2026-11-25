@@ -110,6 +110,17 @@ Get-Content Virtuart4DConvert.zip.sha256
 
 Yearly MPXJ exceptions keep their existing recurrence types. Weekly exceptions expand into one dated type-9 exception per MPXJ-provided occurrence, preserving its name, working state, and ranges. Other exposed recurrence types remain unsupported and fail conversion.
 
+## ⏱️ Durations, lags and work (since 0.1.8)
+
+`durationHours`, `lagHours` and `workHours` use the project's own day, week and month (MPXJ
+`MinutesPerDay`, `MinutesPerWeek`, `DaysPerMonth`; a missing or zero field uses 480 / 2400 / 20), the same
+day that `hoursPerDay` reports. Before 0.1.8 a day was always 8 h, a week 40 h and a month 160 h. Projects with
+the default 8 h day produce the same numbers as before.
+
+A relation lag in percent has no hours: it is written as `0`, and the converter prints once to stderr
+`Warning: lag reason=unsupported-or-invalid-lag count=<n>`. A percent duration is also written as `0`. A zero lag is
+never counted.
+
 ## 🏷️ Task custom fields (`customFields`, since 0.1.4)
 
 Each task may carry an optional `"customFields": {"<key>": "<value>"}` object. The addition is

@@ -12,7 +12,7 @@ function Gate($dir, $version) {
   if (!(Test-Path (Join-Path $dir 'ikvm/win-x64') -PathType Container)) { throw 'missing ikvm/win-x64' }
   foreach ($n in 'mpxj-lgpl2.1.txt','apache-poi-apache2.txt','jsoup-mit.txt','rtfparserkit-apache2.txt','sqlite-jdbc-apache2.txt') { if (!(Test-Path (Join-Path $dir "licenses/$n") -PathType Leaf)) { throw "missing license $n" } }
   if (@(Get-ChildItem $dir -Recurse -File -Filter '*.pdb').Count) { throw 'PDB present' }
-  $v = (& $exe --version).Trim(); if ($LASTEXITCODE -ne 0 -or $v -ne '0.1.7') { throw 'invalid version' }
+  $v = (& $exe --version).Trim(); if ($LASTEXITCODE -ne 0 -or $v -ne '0.1.8') { throw 'invalid version' }
   $raw = & $exe --info; if ($LASTEXITCODE -ne 0) { throw 'info failed' }; $i = (($raw) -join "`n") | ConvertFrom-Json
   $props = @($i.psobject.Properties); if ($props.Count -ne 2 -or $props.Name -notcontains 'converterVersion' -or $props.Name -notcontains 'mpxjVersion' -or $i.converterVersion -isnot [string] -or $i.mpxjVersion -isnot [string] -or $i.converterVersion -ne $v -or $i.mpxjVersion -ne $version) { throw 'identity mismatch' }
 }
@@ -28,7 +28,7 @@ try {
   New-Item $stage -ItemType Directory | Out-Null
   Run @('publish', $project, '-c', 'Release', '-r', 'win-x64', '--self-contained', '-p:DebugType=none', '-p:DebugSymbols=false', '-p:CopyOutputSymbolsToPublishDirectory=false', '-p:AllowedReferenceRelatedFileExtensions=.xml', '-o', $stage)
   New-Item (Join-Path $stage 'licenses') -ItemType Directory | Out-Null; Copy-Item (Join-Path $root 'licenses/*') (Join-Path $stage 'licenses') -Force
-  Gate $stage $declared; Compress-Archive (Join-Path $stage '*') $attemptZip -Force
+  Gate $stage $declared; Start-Sleep -Seconds 5; Compress-Archive (Join-Path $stage '*') $attemptZip -Force
   New-Item $extract -ItemType Directory | Out-Null; Expand-Archive $attemptZip $extract -Force; Gate $extract $declared
   if ($beforeHash -and (FileHash $project) -ne $beforeHash) { throw 'project changed during developer build' }
   $zipDir = Join-Path $root 'zip'; $finalZip = Join-Path $zipDir 'Virtuart4DConvert.zip'; $finalSha = Join-Path $zipDir 'Virtuart4DConvert.zip.sha256'

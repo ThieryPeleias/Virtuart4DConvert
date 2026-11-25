@@ -64,6 +64,14 @@ try
 
     var props = project.ProjectProperties;
 
+    // Project day/week/month for duration, lag and work. Only a null or <= 0 field falls back to its MPXJ default.
+    var units = new ProjectTime(
+        project,
+        props?.MinutesPerDay is > 0 ? props.MinutesPerDay.Value : 480,
+        props?.MinutesPerWeek is > 0 ? props.MinutesPerWeek.Value : 2400,
+        props?.DaysPerMonth is > 0 ? props.DaysPerMonth.Value : 20);
+    var unsupportedLags = 0;
+
     // --- Calendars ---
     var calendars = new List<CalendarDto>();
     foreach (var cal in project.Calendars)
@@ -127,6 +135,7 @@ try
             throw new ConversionException($"task uid={uid.Value} source=mpxj field=parentUid value=unreadable");
 
         var preds = new List<PredecessorDto>();
+        var taskUnsupportedLags = 0;
         if (task.Predecessors != null)
         {
             foreach (var rel in task.Predecessors)
@@ -138,7 +147,7 @@ try
                 {
                     Uid      = rel.PredecessorTask.UniqueID ?? 0,
                     Type     = rel.Type?.ToString() ?? "FS",
-                    LagHours = DurationToHours(rel.Lag),
+                    LagHours = LagToHours(rel.Lag, units, ref taskUnsupportedLags),
                 });
             }
         }
@@ -150,6 +159,7 @@ try
             omittedUids.Add((uid.Value, task.Name ?? ""));
             continue;
         }
+        unsupportedLags += taskUnsupportedLags;
         if (start == null || finish == null)
             throw new ConversionException($"task uid={uid.Value} source=mpxj field=dates value=partial");
         if (start.Value > finish.Value)
@@ -167,7 +177,7 @@ try
                 {
                     ResourceUid = resUid,
                     Units       = ra.Units ?? 1.0,
-                    WorkHours   = DurationToHours(ra.Work),
+                    WorkHours   = DurationToHours(ra.Work, units),
                 });
             }
         }
@@ -188,7 +198,7 @@ try
             CalendarUid         = task.Calendar?.UniqueID ?? -1,
             Start               = FmtDateTime(start),
             Finish              = FmtDateTime(finish),
-            DurationHours       = DurationToHours(task.Duration),
+            DurationHours       = DurationToHours(task.Duration, units),
             IsSummary           = task.Summary,
             IsMilestone         = task.Milestone,
             OutlineLevel        = task.OutlineLevel ?? 0,
@@ -260,6 +270,8 @@ try
         var more = sorted.Count > 10 ? $", and {sorted.Count - 10} more" : "";
         Console.Error.WriteLine($"Warning: omitted {sorted.Count} task(s) without start and finish: {string.Join(", ", sample)}{more}");
     }
+    if (unsupportedLags > 0)
+        Console.Error.WriteLine($"Warning: lag reason=unsupported-or-invalid-lag count={unsupportedLags}");
     return 0;
 }
 catch (ConversionException ex)
@@ -457,23 +469,29 @@ static string[] FmtRange(TimeOnly start, TimeOnly end)
     return [start.ToString("HH:mm:ss", CultureInfo.InvariantCulture), endText];
 }
 
-static double DurationToHours(Duration? d)
+static bool IsPercent(Duration d) => d.Units is TimeUnit.Percent or TimeUnit.ElapsedPercent;
+
+// Hours of a Duration by the project's own day, week and month. Percent is not time: 0.
+static double DurationToHours(Duration? d, ProjectTime t)
 {
-    if (d == null) return 0;
-    var val = d.DurationValue;
-    return d.Units switch
+    if (d == null || IsPercent(d)) return 0;
+    var hours = d.Units is TimeUnit unit
+        ? Duration.ConvertUnits(t.Project, d.DurationValue, unit, TimeUnit.Hours, t.MinutesPerDay, t.MinutesPerWeek, t.DaysPerMonth).DurationValue
+        : d.DurationValue;
+    if (!double.IsFinite(hours))
+        throw new ConversionException("source=mpxj field=duration value=non-finite");
+    return hours;
+}
+
+// A non-zero percent lag has no hours: 0, counted once per lag. Zero is zero in any unit.
+static double LagToHours(Duration? lag, ProjectTime t, ref int unsupported)
+{
+    if (lag != null && IsPercent(lag))
     {
-        TimeUnit.Minutes        => val / 60.0,
-        TimeUnit.Hours          => val,
-        TimeUnit.Days           => val * 8.0,
-        TimeUnit.Weeks          => val * 40.0,
-        TimeUnit.Months         => val * 160.0,
-        TimeUnit.ElapsedMinutes => val / 60.0,
-        TimeUnit.ElapsedHours   => val,
-        TimeUnit.ElapsedDays    => val * 24.0,
-        TimeUnit.ElapsedWeeks   => val * 168.0,
-        _ => val,
-    };
+        if (lag.DurationValue != 0) unsupported++;
+        return 0;
+    }
+    return DurationToHours(lag, t);
 }
 
 static string CalendarError(ProjectCalendar cal, string field, string value) =>
@@ -812,6 +830,8 @@ record TaskDto
 record CustomFieldDef(string Family, int Index, string Key);
 
 record ActivityCodeDef(int TypeId, string ValueKey, string DescriptionKey, int ValueCount);
+
+record ProjectTime(ProjectFile Project, double MinutesPerDay, double MinutesPerWeek, double DaysPerMonth);
 
 record PredecessorDto
 {
